@@ -37,7 +37,7 @@ def radon_norm(f_shape):
     return norm
 
 
-def lq_primal_dual(meas, f_shape):
+def LS_primal_dual(meas, f_shape):
     '''
     Computes the least squares minimizer with respect to f  to the problem 1/2 norm(Af - g)^2, where norm denotes 
     the L2-norm, using the primal-dual method. In this case A is the radon transform, f is the reconstruction we want to
@@ -83,7 +83,7 @@ noise_level = 0.1
 noisy_data = data + noise_level*np.random.randn(data.shape[0], data.shape[1])
 
 # Compute the reconstruction
-rec = lq_primal_dual(noisy_data, (256, 256))
+rec = LS_primal_dual(noisy_data, (256, 256))
 
 
 pylab.gray()
