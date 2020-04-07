@@ -30,7 +30,7 @@ def projected_grad_desc_TV(meas, f_size):
     beta = 1e-8
     lambdak = 1e-4
     fk = At(meas)
-    grad = (2 * At(A(fk)-meas)) - alpha*tv.tv_grad(fk, beta)
+    grad = (2 * At(A(fk)-meas)) - alpha*tv.smoothed_tv_grad(fk, beta)
 
     for i in range(301):
         fOld = fk

@@ -4,21 +4,25 @@ import math
 from astra import add_noise_to_sino
 from numeric import radon as r, tv_grad as tv
 
-theta = np.linspace(0, np.pi, 60, False)
+n_ang = 30
+n = 128
 
+phantom = {32:r.phantom32, 64:r.phantom64, 128:r.phantom128, 256:r.phantom}
 
-def A(f):
+theta = np.linspace(0, np.pi, n_ang, False)
+
+def Af(f):
     # Define the forward projection with given number of angles
 
     global theta
     return r.radon(f, theta)
 
 
-def At(g):
+def Atf(g):
     # Define the backprojection with given number of angles
 
     global theta
-    return r.iradon(g, theta, 256)
+    return r.iradon(g, theta, n)
 
 
 def radon_norm(f_shape):
@@ -29,15 +33,30 @@ def radon_norm(f_shape):
     xk = np.ones(f_shape)
 
     for i in range(21):
-        xk = At(A(xk))
-        xk = xk/np.linalg.norm(xk, 2)
+        xk = Atf(Af(xk))
+        xk = xk/np.linalg.norm(xk)
 
-        norm = np.linalg.norm(A(xk), 2)
+        norm = np.linalg.norm(Af(xk))
+
+    return norm
+
+def radon_norm_mat(A, At, f_shape):
+    '''
+    Computes the L2-norm of the radon transform. According to Sidky et al this should converge to the
+    norm within 20 iterations so we stop there.
+    '''
+    xk = np.ones(f_shape).flatten()
+
+    for i in range(21):
+        xk = At.dot(A.dot(xk))
+        xk = xk/np.linalg.norm(xk)
+
+        norm = np.linalg.norm(A.dot(xk))
 
     return norm
 
 
-def LS_primal_dual(meas, f_shape):
+def LS_primal_dual(meas, f_shape, show_prog=False):
     '''
     Computes the least squares minimizer with respect to f  to the problem 1/2 norm(Af - g)^2, where norm denotes 
     the L2-norm, using the primal-dual method. In this case A is the radon transform, f is the reconstruction we want to
@@ -45,7 +64,7 @@ def LS_primal_dual(meas, f_shape):
     '''
 
     # We compute the L2-norm of the radon transform using the power method
-    L = radon_norm((256, 256))
+    L = radon_norm(f_shape)
     sigma = 1/L
     tau = 1/L
     Theta = 1
@@ -56,40 +75,87 @@ def LS_primal_dual(meas, f_shape):
     fk = np.zeros(f_shape)
     ft = fk
 
-    for i in range(301):
-        pk = (pk+sigma*(A(ft) - meas))/(1+sigma)
+    for i in range(1001):
+        pk = (pk+sigma*(Af(ft) - meas))/(1+sigma)
         f_prev = fk
-        fk = fk - tau*At(pk)
+        fk = fk - tau*Atf(pk)
         fk[fk < 0] = 0  # Positivity constraint
         ft = fk + Theta*(fk - f_prev)
 
-        if i % 50 == 0:
-            gap = 1/2*np.linalg.norm(A(ft)-meas, 2)**2 + 1/2 * \
-                np.linalg.norm(pk, 2)**2 + np.dot(pk.flatten(), meas.flatten())
-            pylab.figure(1)
-            pylab.title("Iteration {} | Dual gap: {}".format(i, round(gap, 1)))
-            pylab.gray()
-            pylab.imshow(ft)
-            pylab.pause(0.1)
+        if show_prog:
+            if i % 50 == 0:
+                gap = 1/2*np.linalg.norm(Af(fk)-meas)**2 + 1/2 * \
+                    np.linalg.norm(pk)**2 + np.dot(pk.flatten(), meas.flatten())
+                at = np.linalg.norm(Atf(pk).flatten(), np.inf)
+                pylab.figure(1)
+                pylab.title("Iteration {} | Dual gap: {:.2f} | A^tp: {:.2f}".format(i, gap, at))
+                pylab.gray()
+                pylab.imshow(fk)
+                pylab.pause(0.1)
 
-    return ft
+    return fk
+
+def LS_primal_dual_mat(A, At, meas, f_shape,show_prog=False):
+    '''
+    Computes the least squares minimizer with respect to f  to the problem 1/2 norm(Af - g)^2, where norm denotes 
+    the L2-norm, using the primal-dual method. In this case A is the radon transform, f is the reconstruction we want to
+    obtain and g is the measurement data given by the parameter meas.
+    '''
+
+    # We compute the L2-norm of the radon transform using the power method
+    L = radon_norm_mat(A,At,f_shape)
+    sigma = 1/L
+    tau = 1/L
+    Theta = 1
+
+    # Initialize the solution pk to the dual problem to zero
+    pk = np.zeros(meas.shape).flatten()
+    # Initialize the solution fk to the primal problem to zero
+    fk = np.zeros(f_shape).flatten()
+    ft = fk
+    meas_v = meas.flatten()
+
+    for i in range(1001):
+        pk = (pk+sigma*(A.dot(ft) - meas_v))/(1+sigma)
+        f_prev = fk
+        fk = fk - tau*At.dot(pk)
+        fk[fk < 0] = 0  # Positivity constraint
+        ft = fk + Theta*(fk - f_prev)
+
+        if show_prog:
+            if i % 50 == 0:
+                gap = 1/2*np.linalg.norm(A.dot(ft)-meas_v, 2)**2 + 1/2 * \
+                    np.linalg.norm(pk, 2)**2 + np.dot(pk, meas_v)
+                at = np.linalg.norm(At.dot(pk), np.inf)
+                pylab.figure(2)
+                pylab.title("Iteration {} | Dual gap: {:.2f} | A^tp: {:.2f}".format(i, gap, at))
+                pylab.gray()
+                pylab.imshow(np.reshape(ft,f_shape))
+                pylab.pause(0.1)
+
+    return np.reshape(ft, f_shape)
 
 
-# Creating measurement data
-data = r.radon(r.phantom, theta)
+if __name__ == "__main__":
+    # Creating measurement data
+    data = r.radon(phantom[n], theta)
 
-# Adding noise
-noise_level = 0.1
-noisy_data = data + noise_level*np.random.randn(data.shape[0], data.shape[1])
+    #A = r.radon_matrix(n_ang, n)
+    #At = np.transpose(A)
 
-# Compute the reconstruction
-rec = LS_primal_dual(noisy_data, (256, 256))
+    # Adding noise
+    noise_level = 0.01
+    noisy_data = data + noise_level*np.random.randn(data.shape[0], data.shape[1])
+
+    # Compute the reconstruction
+    rec = LS_primal_dual(noisy_data, (n, n), True)
+    #rec2 = LS_primal_dual_mat(A, At, noisy_data, (n,n), True)
 
 
-pylab.gray()
-pylab.figure(0)
-pylab.imshow(r.phantom)
-pylab.figure(2)
-pylab.imshow(At(noisy_data))
+    pylab.gray()
+    pylab.figure(0)
+    pylab.imshow(phantom[n])
+    pylab.figure(2)
+    pylab.plot(np.linspace(0,n,n), rec[n//2,:], 'r', np.linspace(0,n,n), phantom[n][n//2,:], 'b')
 
-pylab.show()
+    pylab.show()

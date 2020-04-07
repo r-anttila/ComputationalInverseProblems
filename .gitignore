@@ -1,3 +1,10 @@
 .vscode
 /samples
 /numeric/__pycache__
+__pycache__
+/Initial Presentation
+/Report
+*.jpg
+*.png
+*.zip
+*.pdf
