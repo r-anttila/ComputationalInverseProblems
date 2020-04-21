@@ -59,7 +59,7 @@ def conjugate_gradient_tikhonov(data, f_shape):
     this function. The matrix g is given by data.
     '''
 
-    alpha = 0.1
+    alpha = 0.01
     fk = np.zeros(f_shape)
     grad = Q(fk, alpha) - At(data)
     dk = -grad
@@ -81,14 +81,14 @@ def conjugate_gradient_tikhonov(data, f_shape):
 data = r.radon(phantom[n], theta)
 noise_level = 0.01
 noisy_data = data + noise_level*np.random.randn(data.shape[0], data.shape[1])
-#tik_rec = conjugate_gradient_tikhonov(noisy_data, (n, n))
-gd_rec = grad_descent(noisy_data, 1)
+tik_rec = conjugate_gradient_tikhonov(noisy_data, (n, n))
+#gd_rec = grad_descent(noisy_data, 5)
 bp = r.iradon(noisy_data, theta, n)
 
 
 pylab.gray()
 pylab.figure(0)
-pylab.imshow(phantom[n])
+pylab.plot(np.linspace(0,n,n), tik_rec[n//2,:], 'r', np.linspace(0,n,n), phantom[n][n//2,:], 'b')
 pylab.figure(2)
-pylab.imshow(gd_rec)
+pylab.imshow(tik_rec)
 pylab.show()
