@@ -1,11 +1,10 @@
 import pylab
 import numpy as np
 import math
-from astra import add_noise_to_sino
 from numeric import radon as r, tv_grad as tv
 
-n = 256
-theta = np.linspace(0, np.pi, 60, False)
+n = 128
+theta = np.linspace(0, np.pi, 180, False)
 phantom = {32:r.phantom32, 64:r.phantom64, 128:r.phantom128, 256:r.phantom}
 
 
@@ -28,13 +27,13 @@ def projected_grad_desc_TV(meas, f_size):
     Computes the Total Variation regularised reconstruction for the data using the
     projected gradient descent method.
     '''
-    alpha = 1
-    beta = 1e-8
+    alpha = 0.1
+    beta = 1e-6
     lambdak = 1e-4
     fk = At(meas)
     grad = (2 * At(A(fk)-meas)) - alpha*tv.smoothed_tv_grad(fk, beta)
 
-    for i in range(1001):
+    for i in range(5001):
         fOld = fk
         gradOld = grad
 
@@ -57,7 +56,7 @@ def projected_grad_desc_TV(meas, f_size):
 
 
 data = r.radon(phantom[n], theta)
-noise_level = 0.1
+noise_level = 0.05
 noisy_data = data + noise_level*np.random.randn(data.shape[0], data.shape[1])
 
 rec = projected_grad_desc_TV(noisy_data, (n, n))
@@ -70,6 +69,8 @@ pylab.imshow(noisy_data)
 # pylab.figure(2)
 # pylab.imshow(rec)
 pylab.figure(1)
-pylab.plot(np.linspace(0,n,n), rec[n//2,:], 'r', np.linspace(0,n,n), phantom[n][n//2,:], 'b')
+pylab.plot(np.linspace(0,n,n), phantom[n][n//2,:], 'b',np.linspace(0,n,n), rec[n//2,:], 'r')
+
+print("Error: {}".format(np.linalg.norm(phantom[n]-rec)))
 
 pylab.show()

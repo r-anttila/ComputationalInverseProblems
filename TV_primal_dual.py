@@ -1,11 +1,10 @@
 import pylab
 import numpy as np
 import math
-from astra import add_noise_to_sino
 from numeric import radon as r, tv_grad as tv
 
-n_ang = 60
-n = 256
+n_ang = 180
+n = 128
 
 phantom = {32:r.phantom32, 64:r.phantom64, 128:r.phantom128, 256:r.phantom}
 
@@ -29,7 +28,7 @@ def norm(f_shape):
 
     xk = np.ones(f_shape)
 
-    for i in range(21):
+    for i in range(41):
         xk = Atf(Af(xk)) - tv.divgrad(xk)
         xk = xk/np.linalg.norm(xk)
 
@@ -41,7 +40,7 @@ def norm_mat(A, At, f_shape):
 
     xk = np.ones(f_shape)
 
-    for i in range(21):
+    for i in range(41):
         xk = At.dot(A.dot(xk.flatten())) - tv.divgrad(np.reshape(xk, f_shape)).flatten()
         xk = xk/np.linalg.norm(xk)
 
@@ -57,7 +56,7 @@ def TV_primal_dual(meas, f_shape, alpha, show_prog=False):
     L = norm(f_shape)
     sigma = 1/L
     tau = 1/L
-    Theta = 0.9
+    Theta = 0.99
     # Initialize the solution pk to the dual problem to zero
     pk = np.zeros(meas.shape)
     # Initialize the solution fk to the primal problem to zero
@@ -68,25 +67,24 @@ def TV_primal_dual(meas, f_shape, alpha, show_prog=False):
     qk_vert = np.zeros(f_shape)
     ft = np.reshape(fk, f_shape)
     
-    for i in range(1001):
+    for i in range(5001):
         pk = (pk+sigma*(Af(ft)-meas))/(1+sigma)
         f_prev = fk
         grad, qk_hor, qk_vert = tv.tv_grad(ft, qk_hor, qk_vert, alpha, sigma)
         fk = fk-tau*Atf(pk) + tau*grad
         fk[fk<0] = 0
         ft = np.reshape(fk + Theta*(fk-f_prev), f_shape)
+
         gap = 1/2*np.linalg.norm(Af(fk)-meas)**2 +alpha*np.sum(np.sqrt(tv.grad_hor(fk)**2+tv.grad_vert(fk)**2)) + 1/2*np.linalg.norm(pk)**2+np.dot(pk.flatten(),meas.flatten())
-        at = np.linalg.norm(Atf(pk).flatten()-grad.flatten(), np.inf)
+
         if show_prog:
             if i % 50 == 0:
                 pylab.figure(2)
-                pylab.title("Iteration {} | Dual gap: {:.2f} | A^tp: {:.2f}".format(i, gap, at))
+                pylab.title("Iteration {} | Dual gap: {:.2f}".format(i, gap))
                 pylab.gray()
                 pylab.imshow(fk)
                 pylab.pause(0.1)
-        
-        if gap <= -20:
-            return ft;
+
 
     return ft
 
@@ -111,21 +109,19 @@ def TV_primal_dual_mat(A, At, meas, f_shape, alpha, show_prog=False):
     ft = np.reshape(fk, f_shape)
     meas_v = meas.flatten()
     
-    for i in range(1001):
+    for i in range(20001):
         pk = (pk+sigma*(A.dot(ft.flatten())-meas_v))/(1+sigma)
         f_prev = fk
         grad, qk_hor, qk_vert = tv.tv_grad(ft, qk_hor, qk_vert, alpha, sigma)
         fk = fk-tau*At.dot(pk.flatten()) + tau*grad.flatten()
-        fk[fk<0] = 0
         ft = np.reshape(fk + Theta*(fk-f_prev), f_shape)
         if show_prog:
             if i % 50 == 0:
                 gap = 1/2*np.linalg.norm(A.dot(ft.flatten())-meas_v)**2 +alpha*np.sum(np.sqrt(tv.grad_hor(ft)**2+tv.grad_vert(ft)**2)) + 1/2*np.linalg.norm(pk)**2+np.dot(pk,meas_v)
-                at = np.linalg.norm(At.dot(pk)-grad.flatten(), np.inf)
                 pylab.figure(2)
-                pylab.title("Iteration {} | Dual gap: {:.2f} | A^tp: {:.2f}".format(i, gap, at))
+                pylab.title("Iteration {} | Dual gap: {}".format(i, gap))
                 pylab.gray()
-                pylab.imshow(ft)
+                pylab.imshow(np.reshape(fk, f_shape))
                 pylab.pause(0.1)
 
     return ft
@@ -135,21 +131,23 @@ if __name__ == "__main__":
     # Creating measurement data
     data = r.radon(phantom[n], theta)
 
-    #A = r.radon_matrix(n_ang, n)
+    #A = r.radon_matrix(theta, n)
     #At = np.transpose(A)
 
     # Adding noise
-    noise_level = 0.1
+    noise_level = 0.05
     noisy_data = data + noise_level*np.random.randn(data.shape[0], data.shape[1])
 
-    #rec = TV_primal_dual_mat(A, At, noisy_data, (n,n), 1, True)
+    #rec = TV_primal_dual_mat(A, At, noisy_data, (n,n), 0.05, True)
 
-    rec = TV_primal_dual(noisy_data, (n,n), 1, True)
+    rec = TV_primal_dual(noisy_data, (n,n), 0.1, True)
 
     pylab.gray()
     pylab.figure(0)
     pylab.imshow(phantom[n])
     pylab.figure(3)
-    pylab.plot(np.linspace(0,n,n), rec[n//2,:], 'r', np.linspace(0,n,n), phantom[n][n//2,:], 'b')
+    pylab.plot(np.linspace(0,n,n), phantom[n][n//2,:], 'b',np.linspace(0,n,n), rec[n//2,:], 'r')
+
+    print("Error: {}".format(np.linalg.norm(phantom[n]-rec)))
 
     pylab.show()

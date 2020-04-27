@@ -25,18 +25,13 @@ def radon(f, theta):
     f_id = astra.data2d.create('-vol', vol_geom, f)
     sin_id = astra.data2d.create('-sino', proj_geom)
 
-    cfg = astra.astra_dict("FP_CUDA")
-    cfg["ProjectionDataId"] = sin_id
-    cfg["VolumeDataId"] = f_id
+    proj_id = astra.create_projector('line', proj_geom, vol_geom)
 
-    alg_id = astra.algorithm.create(cfg)
-    astra.algorithm.run(alg_id)
-    sin_data = astra.data2d.get(sin_id)
-    astra.algorithm.delete(alg_id)
+    sin_id, sin_data = astra.create_sino(f, proj_id)
 
-    astra.data2d.delete(f_id)
-    astra.data2d.delete(sin_id)
-
+    astra.data2d.clear()
+    astra.projector.clear()
+    
     return sin_data
 
 
@@ -48,21 +43,16 @@ def iradon(g, theta, n):
     vol_geom = astra.create_vol_geom(n)
     proj_geom = astra.create_proj_geom('parallel', 1.0, 367, theta)
 
+    proj_id = astra.create_projector('line', proj_geom, vol_geom)
+
     f_id = astra.data2d.create('-vol', vol_geom)
     g_id = astra.data2d.create('-sino', proj_geom, g)
 
-    cfg = astra.astra_dict("BP_CUDA")
-    cfg["ProjectionDataId"] = g_id
-    cfg["ReconstructionDataId"] = f_id
+    rec_id, rec_data = astra.create_backprojection(g, proj_id)
 
-    alg_id = astra.algorithm.create(cfg)
-    astra.algorithm.run(alg_id)
-    rec_data = astra.data2d.get(f_id)
-    astra.algorithm.delete(alg_id)
-
-    astra.data2d.delete(f_id)
-    astra.data2d.delete(g_id)
-
+    astra.data2d.clear()
+    astra.projector.clear()
+    
     return rec_data
 
 
@@ -93,10 +83,9 @@ def fbp(g, theta, n, filter='ram-lak'):
     return rec_data
 
 
-def radon_matrix(n_angles, M):
+def radon_matrix(angles, M):
     #M is equal to the square root of the image size.
     im_size = M**2
-    angles = np.linspace(0, np.pi, n_angles, False)
     tmp = radon(np.zeros((M,M)), angles)
     k = np.size(tmp)
     l = 0

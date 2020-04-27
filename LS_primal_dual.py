@@ -1,15 +1,14 @@
 import pylab
 import numpy as np
 import math
-from astra import add_noise_to_sino
 from numeric import radon as r, tv_grad as tv
 
-n_ang = 30
+n_ang = 90
 n = 128
 
 phantom = {32:r.phantom32, 64:r.phantom64, 128:r.phantom128, 256:r.phantom}
 
-theta = np.linspace(0, np.pi, n_ang, False)
+theta = np.linspace(0, np.pi/2, n_ang, False)
 
 def Af(f):
     # Define the forward projection with given number of angles
@@ -75,7 +74,7 @@ def LS_primal_dual(meas, f_shape, show_prog=False):
     fk = np.zeros(f_shape)
     ft = fk
 
-    for i in range(1001):
+    for i in range(5001):
         pk = (pk+sigma*(Af(ft) - meas))/(1+sigma)
         f_prev = fk
         fk = fk - tau*Atf(pk)
@@ -86,9 +85,8 @@ def LS_primal_dual(meas, f_shape, show_prog=False):
             if i % 50 == 0:
                 gap = 1/2*np.linalg.norm(Af(fk)-meas)**2 + 1/2 * \
                     np.linalg.norm(pk)**2 + np.dot(pk.flatten(), meas.flatten())
-                at = np.linalg.norm(Atf(pk).flatten(), np.inf)
                 pylab.figure(1)
-                pylab.title("Iteration {} | Dual gap: {:.2f} | A^tp: {:.2f}".format(i, gap, at))
+                pylab.title("Iterations {} | Dual gap: {:.2f}".format(i, gap))
                 pylab.gray()
                 pylab.imshow(fk)
                 pylab.pause(0.1)
@@ -126,9 +124,8 @@ def LS_primal_dual_mat(A, At, meas, f_shape,show_prog=False):
             if i % 50 == 0:
                 gap = 1/2*np.linalg.norm(A.dot(ft)-meas_v, 2)**2 + 1/2 * \
                     np.linalg.norm(pk, 2)**2 + np.dot(pk, meas_v)
-                at = np.linalg.norm(At.dot(pk), np.inf)
                 pylab.figure(2)
-                pylab.title("Iteration {} | Dual gap: {:.2f} | A^tp: {:.2f}".format(i, gap, at))
+                pylab.title("Iteration {} | Dual gap: {:.2f}".format(i, gap))
                 pylab.gray()
                 pylab.imshow(np.reshape(ft,f_shape))
                 pylab.pause(0.1)
@@ -140,16 +137,16 @@ if __name__ == "__main__":
     # Creating measurement data
     data = r.radon(phantom[n], theta)
 
-    #A = r.radon_matrix(n_ang, n)
+    #A = r.radon_matrix(theta, n)
     #At = np.transpose(A)
 
     # Adding noise
-    noise_level = 0.01
+    noise_level = 0.05
     noisy_data = data + noise_level*np.random.randn(data.shape[0], data.shape[1])
 
     # Compute the reconstruction
     rec = LS_primal_dual(noisy_data, (n, n), True)
-    #rec2 = LS_primal_dual_mat(A, At, noisy_data, (n,n), True)
+    #rec = LS_primal_dual_mat(A, At, noisy_data, (n,n), True)
 
 
     pylab.gray()
@@ -157,5 +154,7 @@ if __name__ == "__main__":
     pylab.imshow(phantom[n])
     pylab.figure(2)
     pylab.plot(np.linspace(0,n,n), rec[n//2,:], 'r', np.linspace(0,n,n), phantom[n][n//2,:], 'b')
+
+    print("Error: {}".format(np.linalg.norm(phantom[n]-rec)))
 
     pylab.show()
